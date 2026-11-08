@@ -1,6 +1,6 @@
 "use client";
 
-export type SealShape = "circle" | "oval" | "square" | "rectangle";
+export type SealShape = "circle" | "badge" | "oval" | "square" | "rectangle";
 export type Emblem = "none" | "star" | "stars" | "check" | "flower" | "logo";
 export type BorderStyle = "double" | "single" | "dotted" | "rope";
 
@@ -9,6 +9,8 @@ export interface SealOptions {
   topText: string;
   bottomText: string;
   centerText: string; // can contain line breaks
+  regLabel: string;
+  regNo: string;
   emblem: Emblem;
   logo?: HTMLImageElement | null;
   color: string;
@@ -17,6 +19,12 @@ export interface SealOptions {
   textScale: number; // 0.7 – 1.4
   grunge: boolean;
   dateLine: boolean;
+  /** Solid ribbon behind the main centre line, with the text knocked out. */
+  band: boolean;
+  /** Fill the whole seal and knock the artwork out to transparent. */
+  solid: boolean;
+  /** Foil-like gradient instead of flat ink. */
+  metallic: boolean;
 }
 
 export const DEFAULT_SEAL: SealOptions = {
@@ -24,6 +32,8 @@ export const DEFAULT_SEAL: SealOptions = {
   topText: "YOUR COMPANY NAME",
   bottomText: "COLOMBO • SRI LANKA",
   centerText: "APPROVED",
+  regLabel: "Reg. No.",
+  regNo: "",
   emblem: "star",
   color: "#1d4ed8",
   border: "double",
@@ -31,7 +41,28 @@ export const DEFAULT_SEAL: SealOptions = {
   textScale: 1,
   grunge: false,
   dateLine: false,
+  band: false,
+  solid: false,
+  metallic: false,
 };
+
+function shade(hex: string, amt: number) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const f = (c: number) => Math.max(0, Math.min(255, Math.round(c + (amt > 0 ? (255 - c) * amt : c * amt))));
+  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+/** Serrated certificate-seal edge. */
+function badgePath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  const teeth = 36;
+  ctx.beginPath();
+  for (let i = 0; i <= teeth * 2; i++) {
+    const a = (i * Math.PI) / teeth;
+    const rad = i % 2 ? r * 0.93 : r;
+    ctx.lineTo(cx + rad * Math.cos(a), cy + rad * Math.sin(a));
+  }
+  ctx.closePath();
+}
 
 const FONTS = { serif: "Georgia, 'Times New Roman', serif", sans: "Arial, Helvetica, sans-serif" };
 
@@ -116,40 +147,43 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
   ctx.fillStyle = o.color;
   ctx.strokeStyle = o.color;
 
-  const ring = (inset: number, width: number, dash?: number[]) => {
-    ctx.lineWidth = width;
-    ctx.setLineDash(dash ?? []);
+  const circ = o.shape === "circle" || o.shape === "badge";
+  const shapePath = (inset: number, serrated = false) => {
     ctx.beginPath();
-    if (o.shape === "circle") ctx.arc(cx, cy, W / 2 - inset, 0, Math.PI * 2);
+    if (serrated) badgePath(ctx, cx, cy, W / 2 - inset);
+    else if (circ) ctx.arc(cx, cy, W / 2 - inset, 0, Math.PI * 2);
     else if (o.shape === "oval") ctx.ellipse(cx, cy, W / 2 - inset, H / 2 - inset, 0, 0, Math.PI * 2);
     else ctx.roundRect(inset, inset, W - inset * 2, H - inset * 2, size * 0.03);
+  };
+  const ring = (inset: number, width: number, dash?: number[], serrated = false) => {
+    ctx.lineWidth = width;
+    ctx.setLineDash(dash ?? []);
+    ctx.lineJoin = "round";
+    shapePath(inset, serrated);
     ctx.stroke();
     ctx.setLineDash([]);
   };
 
   // Borders
   const outer = lw * 1.2;
-  ring(outer, lw * 1.6);
+  if (o.shape === "badge") {
+    ring(outer, lw * 1.2, undefined, true);
+    ring(outer + lw * 3.2, lw * 1.2);
+  } else ring(outer, lw * 1.6);
   if (o.border === "double") ring(outer + lw * 2.4, lw * 0.7);
   if (o.border === "dotted") ring(outer + lw * 2.6, lw * 0.9, [lw * 0.2, lw * 1.6]);
   if (o.border === "rope") ring(outer + lw * 2.6, lw * 1.4, [lw * 1.2, lw * 0.8]);
 
   const textBand = size * 0.1 * o.textScale;
-  const innerInset = outer + lw * 2.4 + textBand + lw * 1.2;
-  const round = o.shape === "circle" || o.shape === "oval";
+  const badgeExtra = o.shape === "badge" ? lw * 2.6 : 0;
+  const innerInset = outer + badgeExtra + lw * 2.4 + textBand + lw * 1.2;
+  const round = circ || o.shape === "oval";
 
   // Inner ring that frames the centre
-  if (o.topText || o.bottomText) {
-    ctx.lineWidth = lw * 0.7;
-    ctx.beginPath();
-    if (o.shape === "circle") ctx.arc(cx, cy, W / 2 - innerInset, 0, Math.PI * 2);
-    else if (o.shape === "oval") ctx.ellipse(cx, cy, W / 2 - innerInset, H / 2 - innerInset, 0, 0, Math.PI * 2);
-    else ctx.roundRect(innerInset, innerInset, W - innerInset * 2, H - innerInset * 2, size * 0.02);
-    ctx.stroke();
-  }
+  if (o.topText || o.bottomText) ring(innerInset, lw * 0.7);
 
   // Outer band text
-  const bandR = W / 2 - outer - lw * 2.4 - textBand / 2 - lw * 0.6;
+  const bandR = W / 2 - outer - badgeExtra - lw * 2.4 - textBand / 2 - lw * 0.6;
   const fontSize = textBand * 0.72;
   ctx.font = `bold ${fontSize}px ${fam}`;
   if (round) {
@@ -164,11 +198,12 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
     const k = W / H;
     const r = o.shape === "oval" ? (H / 2 - outer - lw * 2.4 - textBand / 2 - lw * 0.6) * k : bandR;
     const unsquash = o.shape === "oval" ? k : 1;
-    if (o.topText) arcText(ctx, o.topText.toUpperCase(), cx, cy, r, true, fontSize * 0.12, unsquash);
-    if (o.bottomText) arcText(ctx, o.bottomText.toUpperCase(), cx, cy, r, false, fontSize * 0.12, unsquash);
+    const spacing = fontSize * (o.font === "sans" ? 0.28 : 0.12);
+    if (o.topText) arcText(ctx, o.topText.toUpperCase(), cx, cy, r, true, spacing, unsquash);
+    if (o.bottomText) arcText(ctx, o.bottomText.toUpperCase(), cx, cy, r, false, spacing, unsquash);
     ctx.restore();
     // separators between top and bottom text
-    if (o.topText && o.bottomText && o.shape === "circle") {
+    if (o.topText && o.bottomText && circ) {
       star(ctx, cx - bandR, cy, fontSize * 0.35);
       star(ctx, cx + bandR, cy, fontSize * 0.35);
     }
@@ -188,8 +223,10 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
 
   // Centre content
   const innerW =
-    o.shape === "circle" ? (W / 2 - innerInset) * 1.5 : o.shape === "oval" ? (W / 2 - innerInset) * 1.4 : W - innerInset * 2 - size * 0.04;
+    circ ? (W / 2 - innerInset) * 1.5 : o.shape === "oval" ? (W / 2 - innerInset) * 1.4 : W - innerInset * 2 - size * 0.04;
   const lines = o.centerText.split("\n").filter((l) => l.trim());
+  const centerCount = lines.length;
+  if (o.regNo.trim()) lines.push(`${o.regLabel.trim()} ${o.regNo.trim()}`.trim());
   if (o.dateLine) lines.push(new Date().toLocaleDateString());
   const emblemR = (o.shape === "rectangle" || o.shape === "oval" ? H : W) * 0.07 * o.textScale;
   const hasEmblem = o.emblem !== "none" && !(o.emblem === "logo" && !o.logo);
@@ -232,11 +269,60 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   lines.forEach((line, i) => {
-    const maxSize = i === 0 && !o.dateLine ? lineH * 0.95 : lineH * 0.7;
-    fitFont(ctx, line, fam, innerW, maxSize);
-    ctx.fillText(line, cx, y + lineH / 2);
+    // The main centre line is large; registration number and date lines are smaller.
+    const maxSize = i >= centerCount ? lineH * 0.6 : lines.length === 1 ? lineH * 0.95 : lineH * 0.8;
+    if (i === 0 && o.band && centerCount > 0) {
+      // Ribbon band clipped to the inner shape, with the text knocked out of it
+      const s = fitFont(ctx, line, fam, innerW * 0.92, maxSize * 0.9);
+      ctx.save();
+      shapePath(o.topText || o.bottomText ? innerInset : outer + lw);
+      ctx.clip();
+      ctx.fillRect(0, y + lineH / 2 - s * 0.85, W, s * 1.7);
+      ctx.restore();
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillText(line, cx, y + lineH / 2 + s * 0.04);
+      ctx.restore();
+    } else {
+      fitFont(ctx, line, fam, innerW, maxSize);
+      ctx.fillText(line, cx, y + lineH / 2);
+    }
     y += lineH;
   });
+
+  // Solid: fill the seal and cut the artwork out of it
+  if (o.solid) {
+    const art = document.createElement("canvas");
+    art.width = W;
+    art.height = H;
+    art.getContext("2d")!.drawImage(canvas, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    shapePath(outer - lw * 0.8, o.shape === "badge");
+    ctx.fill();
+    ctx.globalCompositeOperation = "destination-out";
+    // keep the outermost border as the coloured edge
+    ctx.save();
+    shapePath(outer + lw * 0.9, o.shape === "badge");
+    ctx.clip();
+    ctx.drawImage(art, 0, 0);
+    ctx.restore();
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  // Metallic foil finish
+  if (o.metallic) {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, shade(o.color, 0.55));
+    g.addColorStop(0.35, o.color);
+    g.addColorStop(0.55, shade(o.color, 0.4));
+    g.addColorStop(0.8, shade(o.color, -0.35));
+    g.addColorStop(1, shade(o.color, 0.25));
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = o.color;
+  }
 
   // Worn rubber-stamp texture
   if (o.grunge) {

@@ -1,6 +1,7 @@
 "use client";
 
-import { Eraser, Trash2, Upload, X } from "lucide-react";
+import { Camera, Eraser, Trash2, Upload, X } from "lucide-react";
+import { type Clarity, extractSignature, type InkMode } from "@/lib/extract-signature";
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Segmented } from "./ui";
 import { SIGNATURE_FONTS } from "@/lib/fonts";
@@ -67,8 +68,11 @@ export function SignatureDialog({
   const [ink, setInk] = useState(INKS[0]);
   const [typed, setTyped] = useState("");
   const [fontIdx, setFontIdx] = useState(0);
-  const [uploaded, setUploaded] = useState<string | null>(null);
-  const [removeBg, setRemoveBg] = useState(true);
+  const [source, setSource] = useState<HTMLImageElement | null>(null);
+  const [extracted, setExtracted] = useState<string | null>(null);
+  const [sensitivity, setSensitivity] = useState(0.5);
+  const [inkMode, setInkMode] = useState<InkMode>("original");
+  const [clarity, setClarity] = useState<Clarity>("clear");
   const [saved, setSaved] = useState<string[]>([]);
   const [remember, setRemember] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -119,26 +123,24 @@ export function SignatureDialog({
     return trimCanvas(c);
   };
 
-  const fromUpload = async (dataUrl: string) => {
+  const pickPhoto = async (file?: File) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
     const img = new Image();
-    img.src = dataUrl;
+    img.src = url;
     await img.decode();
-    const k = Math.min(1, 1200 / img.naturalWidth);
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.naturalWidth * k);
-    c.height = Math.round(img.naturalHeight * k);
-    const ctx = c.getContext("2d")!;
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    if (removeBg) {
-      const d = ctx.getImageData(0, 0, c.width, c.height);
-      for (let i = 0; i < d.data.length; i += 4) {
-        const lum = 0.299 * d.data[i] + 0.587 * d.data[i + 1] + 0.114 * d.data[i + 2];
-        if (lum > 200) d.data[i + 3] = 0;
-      }
-      ctx.putImageData(d, 0, 0);
-    }
-    return trimCanvas(c);
+    setSource(img);
   };
+
+  // Re-extract the ink whenever the photo or settings change (live preview).
+  useEffect(() => {
+    if (!source) {
+      setExtracted(null);
+      return;
+    }
+    const t = setTimeout(() => setExtracted(extractSignature(source, sensitivity, inkMode, clarity)), 60);
+    return () => clearTimeout(t);
+  }, [source, sensitivity, inkMode, clarity]);
 
   const card = (
       <div
@@ -258,32 +260,73 @@ export function SignatureDialog({
 
           {tab === "upload" && (
             <div className="flex flex-col gap-3">
-              <label className="flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-white text-sm text-zinc-500 hover:border-accent">
-                {uploaded ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={uploaded} alt="Uploaded signature" className="max-h-36 max-w-full object-contain" />
-                ) : (
-                  <>
-                    <Upload className="h-6 w-6" /> Choose an image of your signature
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    const r = new FileReader();
-                    r.onload = () => setUploaded(r.result as string);
-                    r.readAsDataURL(f);
-                  }}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={removeBg} onChange={(e) => setRemoveBg(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
-                Remove white background
-              </label>
+              {!source ? (
+                <div className="flex flex-col gap-2">
+                  <label className="flex h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-white px-4 text-center text-sm text-zinc-500 hover:border-accent">
+                    <Upload className="h-6 w-6" />
+                    Choose a photo or scan of your signature on paper
+                    <span className="text-xs text-zinc-400">Only the ink is kept — the paper is removed automatically</span>
+                    <input type="file" accept="image/*" className="sr-only" onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-surface p-2.5 text-sm font-medium hover:bg-surface-2 sm:hidden">
+                    <Camera className="h-4 w-4" /> Take a photo
+                    <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+                  </label>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-muted">
+                    <span>Your photo</span>
+                    <span>Signature only</span>
+                    <div className="flex h-28 items-center justify-center overflow-hidden rounded-xl border border-line bg-white p-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={source.src} alt="Original photo" className="max-h-full max-w-full object-contain" />
+                    </div>
+                    <div
+                      className="flex h-28 items-center justify-center overflow-hidden rounded-xl border border-accent p-1"
+                      style={{ backgroundImage: "repeating-conic-gradient(#eef0f5 0 25%, #fff 0 50%)", backgroundSize: "14px 14px" }}
+                    >
+                      {extracted ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={extracted} alt="Extracted signature" className="max-h-full max-w-full object-contain" />
+                      ) : (
+                        <span>No ink found — raise sensitivity</span>
+                      )}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-3 text-sm">
+                    <span className="w-24 shrink-0 text-muted">Sensitivity</span>
+                    <input type="range" min={0} max={1} step={0.05} value={sensitivity} onChange={(e) => setSensitivity(+e.target.value)} className="flex-1 accent-[var(--accent)]" />
+                  </label>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-24 shrink-0 text-muted">Clarity</span>
+                    <Segmented
+                      value={clarity}
+                      onChange={setClarity}
+                      options={[
+                        { value: "normal", label: "Normal" },
+                        { value: "clear", label: "Clear" },
+                        { value: "bold", label: "Bold" },
+                      ]}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="w-24 shrink-0 text-muted">Ink colour</span>
+                    <Segmented
+                      value={inkMode}
+                      onChange={setInkMode}
+                      options={[
+                        { value: "original", label: "Original" },
+                        { value: "blue", label: "Blue" },
+                        { value: "black", label: "Black" },
+                      ]}
+                    />
+                  </div>
+                  <button onClick={() => setSource(null)} className="self-start text-xs text-accent hover:underline">
+                    Choose a different photo
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -296,11 +339,11 @@ export function SignatureDialog({
             </label>
             <Button
               variant="primary"
-              disabled={(tab === "draw" && !hasInk) || (tab === "type" && !typed.trim()) || (tab === "upload" && !uploaded)}
+              disabled={(tab === "draw" && !hasInk) || (tab === "type" && !typed.trim()) || (tab === "upload" && !extracted)}
               onClick={async () => {
                 if (tab === "draw") finish(trimCanvas(canvasRef.current!));
                 else if (tab === "type") finish(await fromTyped());
-                else if (uploaded) finish(await fromUpload(uploaded));
+                else if (extracted) finish(extracted);
               }}
             >
               {doneLabel}

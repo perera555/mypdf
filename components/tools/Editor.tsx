@@ -93,7 +93,7 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
     stamp: STAMPS[0],
   });
   const [pending, setPending] = useState<Pending | null>(null);
-  const [sigDialog, setSigDialog] = useState<null | "signature" | "initials">(mode === "sign" ? "signature" : null);
+  const [sigDialog, setSigDialog] = useState<null | "signature" | "initials">(null);
   const [sealDialog, setSealDialog] = useState(false);
   const [sizes, setSizes] = useState<{ w: number; h: number }[] | null>(null);
   const [scale, setScale] = useState(1);
@@ -268,9 +268,11 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
         ? "Drag over anything you want to permanently black out."
         : tool === "text"
           ? "Click on a page to type."
-          : tool === "select" && mode === "sign" && !objects.length
-            ? "Use Signature, Initials, Text, Date or ✓ to fill and sign."
-            : null;
+          : mode === "sign" && sel
+            ? "Drag to move · drag the corner or use Smaller / Bigger to resize."
+            : mode === "sign"
+              ? "Press Sign, then tap where your signature should go."
+              : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -287,8 +289,49 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
       </FileBar>
 
       <div className="sticky top-14 z-30 flex flex-col gap-2 rounded-2xl border border-line bg-surface/95 p-2 shadow-card backdrop-blur">
+        {/* Fill & Sign: simple labelled buttons */}
+        {mode === "sign" && (
+          <div className="thin-scroll flex items-center gap-1.5 overflow-x-auto">
+            <button
+              onClick={() => setSigDialog("signature")}
+              className="brand-gradient inline-flex h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white shadow-sm hover:brightness-110"
+            >
+              <Signature className="h-4 w-4" /> Sign
+            </button>
+            <SignBtn active={sigDialog === "initials"} onClick={() => setSigDialog("initials")}>
+              <span className="text-xs font-bold">AB</span> Initials
+            </SignBtn>
+            <SignBtn active={tool === "text"} onClick={() => choose("text")}>
+              <Type className="h-4 w-4" /> Text
+            </SignBtn>
+            <SignBtn active={tool === "date"} onClick={() => choose("date")}>
+              <CalendarDays className="h-4 w-4" /> Date
+            </SignBtn>
+            <SignBtn active={tool === "check"} onClick={() => choose("check")}>
+              <Check className="h-4 w-4" />
+            </SignBtn>
+            <SignBtn active={tool === "cross"} onClick={() => choose("cross")}>
+              <X className="h-4 w-4" />
+            </SignBtn>
+            <SignBtn active={sealDialog} onClick={() => setSealDialog(true)}>
+              <BadgeCheck className="h-4 w-4" /> Seal
+            </SignBtn>
+            <SignBtn active={tool === "select"} onClick={() => choose("select")}>
+              <MousePointer2 className="h-4 w-4" /> Move
+            </SignBtn>
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-2">
+              <IconButton label="Zoom out" onClick={() => setScale((s) => Math.max(0.3, s - 0.15))}>
+                <Minus className="h-4 w-4" />
+              </IconButton>
+              <span className="w-11 text-center text-xs text-muted">{Math.round(scale * 100)}%</span>
+              <IconButton label="Zoom in" onClick={() => setScale((s) => Math.min(4, s + 0.15))}>
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            </div>
+          </div>
+        )}
         {/* Tools */}
-        <div className="thin-scroll flex items-center gap-0.5 overflow-x-auto">
+        <div className={`thin-scroll items-center gap-0.5 overflow-x-auto ${mode === "sign" ? "hidden" : "flex"}`}>
           <T t="select" label="Select & move">
             <MousePointer2 className="h-4 w-4" />
           </T>
@@ -439,6 +482,23 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
           {hint && <span className="shrink-0 text-muted">{hint}</span>}
           {sel && (
             <div className="ml-auto flex shrink-0 items-center gap-1">
+              {(["smaller", "bigger"] as const).map((dir) => (
+                <Button
+                  key={dir}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const b = bbox(sel);
+                    const k = dir === "bigger" ? 1.15 : 1 / 1.15;
+                    const w = b.w * k;
+                    const h = b.h * k;
+                    begin();
+                    live((l) => l.map((o) => (o.id === sel.id ? transform(o, b, { x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h }) : o)));
+                  }}
+                >
+                  {dir === "bigger" ? <Plus className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />} {dir === "bigger" ? "Bigger" : "Smaller"}
+                </Button>
+              ))}
               <Button
                 size="sm"
                 variant="ghost"
@@ -540,6 +600,20 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
   );
 }
 
+function SignBtn({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition ${
+        active ? "border-accent bg-accent/10 text-accent" : "border-line bg-surface text-fg hover:bg-surface-2"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function Sep() {
   return <div className="mx-1 h-6 w-px shrink-0 bg-line" />;
 }
@@ -637,7 +711,7 @@ function EditorPage(props: {
         const cur = objects.find((o) => o.id === selected);
         if (cur) {
           const b = bbox(cur);
-          const hs = 10 / scale;
+          const hs = 16 / scale;
           if (Math.abs(x - (b.x + b.w)) < hs && Math.abs(y - (b.y + b.h)) < hs) {
             props.begin();
             drag.current = { mode: "resize", id: cur.id, start: [x, y], box: b, origin: cur };
@@ -841,11 +915,16 @@ function EditorPage(props: {
           if (!s) return null;
           const b = bbox(s);
           const p = 3 / scale;
-          const hs = 7 / scale;
+          const hs = 12 / scale;
           return (
             <g pointerEvents="none">
               <rect x={b.x - p} y={b.y - p} width={b.w + p * 2} height={b.h + p * 2} fill="none" stroke="#e11d48" strokeWidth={1.2 / scale} strokeDasharray={`${4 / scale} ${3 / scale}`} />
-              <rect x={b.x + b.w - hs / 2} y={b.y + b.h - hs / 2} width={hs} height={hs} fill="#fff" stroke="#e11d48" strokeWidth={1.5 / scale} />
+              <circle cx={b.x + b.w} cy={b.y + b.h} r={hs / 2} fill="#e11d48" stroke="#fff" strokeWidth={2 / scale} />
+              <path
+                d={`M${b.x + b.w - hs * 0.22},${b.y + b.h + hs * 0.22} L${b.x + b.w + hs * 0.22},${b.y + b.h - hs * 0.22}`}
+                stroke="#fff"
+                strokeWidth={1.5 / scale}
+              />
             </g>
           );
         })()}

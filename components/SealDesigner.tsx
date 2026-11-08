@@ -9,7 +9,12 @@ import { DEFAULT_SEAL, drawSeal, type Emblem, loadSeals, removeSeal, type SealOp
 const INKS = ["#1d4ed8", "#b91c1c", "#15803d", "#7c3aed", "#111827", "#0e7490"];
 
 const TEMPLATES: { label: string; o: Partial<SealOptions> }[] = [
-  { label: "Company", o: { shape: "circle", topText: "YOUR COMPANY (PVT) LTD", bottomText: "REG. NO. PV 00000", centerText: "OFFICIAL\nSEAL", emblem: "star", border: "double", color: "#1d4ed8" } },
+  { label: "✨ Modern", o: { shape: "circle", font: "sans", topText: "YOUR COMPANY", bottomText: "SINCE 2024", centerText: "VERIFIED", regLabel: "Reg. No.", regNo: "PV 00000", emblem: "none", border: "single", band: true, color: "#0f172a" } },
+  { label: "✨ Corporate ribbon", o: { shape: "circle", font: "sans", topText: "YOUR COMPANY (PVT) LTD", bottomText: "COLOMBO • SRI LANKA", centerText: "DIRECTOR", regLabel: "Reg. No.", regNo: "PV 00000", emblem: "star", border: "dotted", band: true, color: "#1d4ed8" } },
+  { label: "✨ Gold certificate", o: { shape: "badge", font: "serif", topText: "CERTIFIED EXCELLENCE", bottomText: "AWARD OF MERIT", centerText: "2026", emblem: "stars", border: "single", solid: true, metallic: true, color: "#b8860b" } },
+  { label: "✨ Minimal", o: { shape: "circle", font: "sans", topText: "YOUR BRAND", bottomText: "", centerText: "OFFICIAL", emblem: "none", border: "single", color: "#111827" } },
+  { label: "✨ Solid badge", o: { shape: "circle", font: "sans", topText: "QUALITY ASSURED", bottomText: "100% GENUINE", centerText: "CERTIFIED", emblem: "check", border: "double", solid: true, color: "#047857" } },
+  { label: "Company", o: { shape: "circle", topText: "YOUR COMPANY (PVT) LTD", bottomText: "COLOMBO • SRI LANKA", centerText: "DIRECTOR", regLabel: "Reg. No.", regNo: "PV 00000", emblem: "star", border: "double", color: "#1d4ed8" } },
   { label: "Approved", o: { shape: "rectangle", topText: "", bottomText: "", centerText: "APPROVED", emblem: "check", border: "double", color: "#15803d", dateLine: true } },
   { label: "Notary", o: { shape: "circle", topText: "NOTARY PUBLIC", bottomText: "COMMISSIONER FOR OATHS", centerText: "YOUR NAME", emblem: "stars", border: "rope", color: "#111827" } },
   { label: "School", o: { shape: "circle", topText: "YOUR SCHOOL NAME", bottomText: "EST. 1990", centerText: "PRINCIPAL", emblem: "flower", border: "dotted", color: "#7c3aed" } },
@@ -105,6 +110,7 @@ export function SealDesigner({ onUse, useLabel = "Use this seal" }: { onUse?: (d
             onChange={(shape) => set({ shape })}
             options={[
               { value: "circle", label: "Round" },
+              { value: "badge", label: "Badge" },
               { value: "oval", label: "Oval" },
               { value: "square", label: "Square" },
               { value: "rectangle", label: "Rect" },
@@ -120,6 +126,14 @@ export function SealDesigner({ onUse, useLabel = "Use this seal" }: { onUse?: (d
         <Field label="Centre text" hint="Press Enter for a new line">
           <textarea value={o.centerText} rows={2} onChange={(e) => set({ centerText: e.target.value })} className="w-full rounded-xl border border-line bg-surface p-3 text-sm outline-none focus:border-accent" />
         </Field>
+        <div className="grid grid-cols-[110px_1fr] gap-3">
+          <Field label="Number label">
+            <Input value={o.regLabel} maxLength={20} placeholder="Reg. No." onChange={(e) => set({ regLabel: e.target.value })} />
+          </Field>
+          <Field label="Company registration number">
+            <Input value={o.regNo} maxLength={32} placeholder="e.g. PV 123456" onChange={(e) => set({ regNo: e.target.value })} />
+          </Field>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Emblem">
             <Select value={o.emblem} onChange={(e) => set({ emblem: e.target.value as Emblem })}>
@@ -174,9 +188,28 @@ export function SealDesigner({ onUse, useLabel = "Use this seal" }: { onUse?: (d
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={o.dateLine} onChange={(e) => set({ dateLine: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /> Add today’s date
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={o.grunge} onChange={(e) => set({ grunge: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /> Real rubber-stamp look
-        </label>
+        <Field label="Style">
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["band", "Ribbon band"],
+                ["solid", "Solid fill"],
+                ["metallic", "Metallic foil"],
+                ["grunge", "Rubber-stamp ink"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => set({ [k]: !o[k] })}
+                aria-pressed={o[k]}
+                className={`rounded-xl border px-3 py-2 text-left text-sm transition ${o[k] ? "border-accent bg-accent/10 font-medium text-accent" : "border-line text-muted hover:text-fg"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
       </div>
     </div>
   );
