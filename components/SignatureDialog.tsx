@@ -50,7 +50,19 @@ function trimCanvas(src: HTMLCanvasElement): string | null {
 
 const INKS = ["#111827", "#1d4ed8", "#b91c1c"];
 
-export function SignatureDialog({ onDone, onClose, title = "Create your signature" }: { onDone: (dataUrl: string) => void; onClose: () => void; title?: string }) {
+export function SignatureDialog({
+  onDone,
+  onClose,
+  title = "Create your signature",
+  inline = false,
+  doneLabel = "Use signature",
+}: {
+  onDone: (dataUrl: string) => void;
+  onClose?: () => void;
+  title?: string;
+  inline?: boolean;
+  doneLabel?: string;
+}) {
   const [tab, setTab] = useState<"draw" | "type" | "upload" | "saved">(() => (loadSavedSignatures().length ? "saved" : "draw"));
   const [ink, setInk] = useState(INKS[0]);
   const [typed, setTyped] = useState("");
@@ -128,14 +140,18 @@ export function SignatureDialog({ onDone, onClose, title = "Create your signatur
     return trimCanvas(c);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
-      <div className="fade-up w-full max-w-xl rounded-t-3xl border border-line bg-surface p-5 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+  const card = (
+      <div
+        className={inline ? "w-full rounded-3xl border border-line bg-surface p-5 shadow-card" : "fade-up w-full max-w-xl rounded-t-3xl border border-line bg-surface p-5 shadow-2xl sm:rounded-3xl"}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-surface-2">
-            <X className="h-5 w-5" />
-          </button>
+          {onClose && (
+            <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-surface-2">
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
         <Segmented
           value={tab}
@@ -287,11 +303,17 @@ export function SignatureDialog({ onDone, onClose, title = "Create your signatur
                 else if (uploaded) finish(await fromUpload(uploaded));
               }}
             >
-              Use signature
+              {doneLabel}
             </Button>
           </div>
         )}
       </div>
+  );
+
+  if (inline) return card;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}>
+      {card}
     </div>
   );
 }

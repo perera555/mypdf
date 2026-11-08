@@ -14,6 +14,7 @@ export function InstallApp() {
   const [installed, setInstalled] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [help, setHelp] = useState(false);
+  const [platform, setPlatform] = useState<"other" | "mac-safari" | "firefox">("other");
 
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
@@ -23,7 +24,11 @@ export function InstallApp() {
       window.matchMedia("(display-mode: standalone)").matches ||
       (navigator as Navigator & { standalone?: boolean }).standalone === true;
     setInstalled(standalone);
-    setIsIos(/iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1));
+    const ua = navigator.userAgent;
+    const ios = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    setIsIos(ios);
+    if (!ios && /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox/.test(ua)) setPlatform("mac-safari");
+    else if (/Firefox/.test(ua) && !/Android/.test(ua)) setPlatform("firefox");
 
     const onPrompt = (e: Event) => {
       e.preventDefault();
@@ -70,7 +75,22 @@ export function InstallApp() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {isIos ? (
+            {platform === "mac-safari" ? (
+              <ol className="space-y-3 text-sm">
+                <li>
+                  1. In Safari’s menu bar, click <b>File</b>
+                </li>
+                <li>
+                  2. Choose <b>Add to Dock…</b> and click <b>Add</b>
+                </li>
+                <li>3. MyPDF appears in your Dock and Launchpad like any Mac app.</li>
+              </ol>
+            ) : platform === "firefox" ? (
+              <p className="text-sm text-muted">
+                Firefox can’t install web apps on computers. Open this page in <b className="text-fg">Chrome</b>, <b className="text-fg">Edge</b> or{" "}
+                <b className="text-fg">Safari</b> (Mac) and press Install app again.
+              </p>
+            ) : isIos ? (
               <ol className="space-y-3 text-sm">
                 <li className="flex items-center gap-2">
                   1. Tap <Share className="h-4 w-4 text-accent" /> <b>Share</b> in Safari’s toolbar
@@ -83,7 +103,7 @@ export function InstallApp() {
             ) : (
               <ul className="space-y-3 text-sm text-muted">
                 <li>
-                  <b className="text-fg">Computer (Chrome / Edge):</b> click the install icon at the right of the address bar, or open the browser menu → <i>Install MyPDF</i>.
+                  <b className="text-fg">Windows, Mac, Linux (Chrome / Edge):</b> click the install icon at the right of the address bar, or open the browser menu → <i>Apps</i> → <i>Install MyPDF</i>.
                 </li>
                 <li>
                   <b className="text-fg">Android:</b> open the browser menu (⋮) → <i>Install app</i> or <i>Add to Home screen</i>.

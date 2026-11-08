@@ -2,6 +2,7 @@
 
 import {
   ArrowUpRight,
+  BadgeCheck,
   Bold,
   CalendarDays,
   Check,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { SealDesigner } from "../SealDesigner";
 import { SignatureDialog } from "../SignatureDialog";
 import { Button, ErrorNote, IconButton, errorMessage } from "../ui";
 import { FileBar, WithPdf, type LoadedPdf } from "../WithPdf";
@@ -92,6 +94,7 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
   });
   const [pending, setPending] = useState<Pending | null>(null);
   const [sigDialog, setSigDialog] = useState<null | "signature" | "initials">(mode === "sign" ? "signature" : null);
+  const [sealDialog, setSealDialog] = useState(false);
   const [sizes, setSizes] = useState<{ w: number; h: number }[] | null>(null);
   const [scale, setScale] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -328,6 +331,9 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
           >
             AB
           </button>
+          <IconButton label="Seal" active={sealDialog} onClick={() => setSealDialog(true)}>
+            <BadgeCheck className="h-4 w-4" />
+          </IconButton>
           <T t="stamp" label="Stamp">
             <Stamp className="h-4 w-4" />
           </T>
@@ -500,6 +506,25 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
           e.target.value = "";
         }}
       />
+      {sealDialog && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setSealDialog(false)}>
+          <div className="fade-up thin-scroll max-h-[92dvh] w-full max-w-5xl overflow-y-auto rounded-t-3xl border border-line bg-surface p-5 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Add a seal</h2>
+              <button onClick={() => setSealDialog(false)} aria-label="Close" className="rounded-lg p-1.5 text-muted hover:bg-surface-2">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <SealDesigner
+              useLabel="Place on PDF"
+              onUse={(url) => {
+                setSealDialog(false);
+                void startPlacing(url, 130);
+              }}
+            />
+          </div>
+        </div>
+      )}
       {sigDialog && (
         <SignatureDialog
           title={sigDialog === "initials" ? "Create your initials" : "Create your signature"}

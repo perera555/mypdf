@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CloudOff, Heart, ShieldCheck, Zap } from "lucide-react";
+import { RecentFiles } from "@/components/RecentFiles";
 import { ToolGrid } from "@/components/ToolGrid";
 import { TOOLS } from "@/lib/tools";
 
@@ -35,7 +36,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="tools" className="mx-auto w-full max-w-7xl scroll-mt-20 px-4 pb-16 sm:px-6">
+      <section id="tools" className="mx-auto flex w-full max-w-7xl scroll-mt-20 flex-col gap-10 px-4 pb-16 sm:px-6">
+        <RecentFiles />
         <ToolGrid />
       </section>
 

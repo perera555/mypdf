@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { FolderHeart, House, LayoutGrid, PenLine, ScanLine } from "lucide-react";
 import { GitHubIcon, LogoMark } from "@/components/Logo";
 import { InstallApp } from "@/components/InstallApp";
+import { Sidebar } from "@/components/Sidebar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -53,7 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <header className="sticky top-0 z-40 border-b border-line bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex h-14 items-center justify-between gap-3 px-4 sm:px-6">
             <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
               <LogoMark />
               <span className="text-lg">
@@ -78,16 +79,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
 
-        <main className="flex flex-1 flex-col">{children}</main>
-
-        <footer className="hidden border-t border-line md:block">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-6 text-sm text-muted">
-            <p>MyPDF · Free and open source. Your files are processed on your device and never uploaded.</p>
-            <a href={REPO} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-fg">
-              <GitHubIcon className="h-4 w-4" /> GitHub
-            </a>
+        <div className="flex flex-1">
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="flex flex-1 flex-col">{children}</main>
+            <footer className="hidden border-t border-line md:block">
+              <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-6 text-sm text-muted">
+                <p>MyPDF · Free and open source. Your files are processed on your device and never uploaded.</p>
+                <a href={REPO} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-fg">
+                  <GitHubIcon className="h-4 w-4" /> GitHub
+                </a>
+              </div>
+            </footer>
           </div>
-        </footer>
+        </div>
 
         {/* Phone tab bar */}
         <nav

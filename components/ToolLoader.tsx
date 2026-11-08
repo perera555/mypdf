@@ -13,6 +13,8 @@ const TOOL_COMPONENTS: Record<string, ComponentType> = {
   edit: dynamic(() => import("./tools/Editor").then((m) => m.EditTool), { ssr: false, loading }),
   sign: dynamic(() => import("./tools/Editor").then((m) => m.SignTool), { ssr: false, loading }),
   redact: dynamic(() => import("./tools/Editor").then((m) => m.RedactTool), { ssr: false, loading }),
+  "create-signature": dynamic(() => import("./tools/CreateSignature"), { ssr: false, loading }),
+  "seal-creator": dynamic(() => import("./tools/SealCreator"), { ssr: false, loading }),
   "fill-forms": dynamic(() => import("./tools/FillForms"), { ssr: false, loading }),
   merge: dynamic(() => import("./tools/Merge"), { ssr: false, loading }),
   split: dynamic(() => import("./tools/Split"), { ssr: false, loading }),

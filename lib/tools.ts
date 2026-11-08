@@ -8,7 +8,6 @@ import {
   PenLine,
   Signature,
   EyeOff,
-  Stamp,
   Hash,
   Crop,
   FormInput,
@@ -21,6 +20,9 @@ import {
   LockOpen,
   Info,
   ScanLine,
+  PenTool,
+  BadgeCheck,
+  Droplets,
 } from "lucide-react";
 
 export type Category = "View & Edit" | "Organize" | "Convert" | "Optimize & Secure";
@@ -67,6 +69,26 @@ export const TOOLS: Tool[] = [
     category: "View & Edit",
     icon: Signature,
     color: "from-fuchsia-500 to-pink-600",
+  },
+  {
+    slug: "create-signature",
+    name: "Create Signature",
+    short: "Make your own signature to download or reuse.",
+    description:
+      "Create a signature for yourself — draw it, type your name in a handwriting style, or upload a photo — then download it as a PNG or use it to sign PDFs.",
+    category: "View & Edit",
+    icon: PenTool,
+    color: "from-pink-500 to-fuchsia-600",
+  },
+  {
+    slug: "seal-creator",
+    name: "Seal Creator",
+    short: "Design official seals and rubber stamps.",
+    description:
+      "Design any seal or stamp — round, oval, square or rectangle — with your organisation name, centre text, emblem or logo, ink colour and date. Download it or stamp it on PDFs.",
+    category: "View & Edit",
+    icon: BadgeCheck,
+    color: "from-blue-600 to-indigo-700",
   },
   {
     slug: "redact",
@@ -147,7 +169,7 @@ export const TOOLS: Tool[] = [
     short: "Stamp text over your pages.",
     description: "Add a text watermark with custom size, color, opacity and angle to every page.",
     category: "Organize",
-    icon: Stamp,
+    icon: Droplets,
     color: "from-blue-500 to-indigo-600",
   },
   {
