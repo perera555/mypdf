@@ -1,14 +1,20 @@
 {
-  "name": "pdf",
-  "version": "0.1.0",
+  "name": "mypdf",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/copy-pdf-worker.mjs",
+    "predev": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/copy-pdf-worker.mjs && next build",
     "start": "next start"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
+    "jszip": "^3.10.2",
+    "lucide-react": "^1.70.0",
     "next": "16.4.5",
+    "pdfjs-dist": "^6.5.438",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
