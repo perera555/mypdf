@@ -276,7 +276,10 @@ export default function Scan() {
             </Button>
           </div>
         </Panel>
-        <DevicesPanel focus="scanner" />
+        <DevicesPanel
+          focus="scanner"
+          onScanned={(blob) => setShots((s) => [...s, { id: crypto.randomUUID(), original: blob, url: URL.createObjectURL(blob), rotation: 0 }])}
+        />
       </div>
     </div>
   );

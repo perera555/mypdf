@@ -9,11 +9,25 @@ import { canvasToBlob, downloadBlob } from "@/lib/files";
 import { type Flourish, INKS, inkCss, initialsOf, renderSignature, type SignatureOptions } from "@/lib/signature-render";
 import { SIGNATURE_STYLES } from "@/lib/signature-styles";
 
+type NameFormat = "full" | "firstInitial" | "initialLast" | "first";
+
+function formatName(name: string, f: NameFormat): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2 || f === "full") return name.trim();
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (f === "firstInitial") return `${first} ${last[0].toUpperCase()}.`;
+  if (f === "initialLast") return `${first[0].toUpperCase()}. ${last}`;
+  return first;
+}
+
 const CHECKER = { backgroundImage: "repeating-conic-gradient(#f1f3f9 0 25%, #fff 0 50%)", backgroundSize: "16px 16px" };
 
 export default function CreateSignature() {
   const [mode, setMode] = useState<"styles" | "draw">("styles");
   const [name, setName] = useState("Your Name");
+  const [nameFormat, setNameFormat] = useState<NameFormat>("full");
+  const text = formatName(name, nameFormat);
   const [styleId, setStyleId] = useState(SIGNATURE_STYLES[0].id);
   const [inkId, setInkId] = useState("navy");
   const [custom, setCustom] = useState("#0f172a");
@@ -35,13 +49,13 @@ export default function CreateSignature() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const key = `${name}|${inkId}|${custom}|${slant}|${weight}|${flourish}|${fontsReady}`;
+  const key = `${text}|${inkId}|${custom}|${slant}|${weight}|${flourish}|${fontsReady}`;
   useEffect(() => {
     if (!fontsReady) return;
     const t = setTimeout(() => {
       const next: Record<string, string> = {};
       for (const s of SIGNATURE_STYLES) {
-        const c = renderSignature({ text: name, family: s.family, scale: s.scale, colors, slant, weight, flourish: flourish === "none" ? "none" : flourish }, 0.6);
+        const c = renderSignature({ text, family: s.family, scale: s.scale, colors, slant, weight, flourish: flourish === "none" ? "none" : flourish }, 0.6);
         if (c) next[s.id] = c.toDataURL("image/png");
       }
       setPreviews(next);
@@ -61,7 +75,7 @@ export default function CreateSignature() {
   const fileBase = (name.trim() || "signature").replace(/[^\w\- ]+/g, "").replace(/\s+/g, "-").toLowerCase();
 
   const download = async (what: "png" | "jpg" | "initials") => {
-    const c = renderSignature(what === "initials" ? { ...opts(initialsOf(name)), flourish: "none" } : opts(name), 3);
+    const c = renderSignature(what === "initials" ? { ...opts(initialsOf(name)), flourish: "none" } : opts(text), 3);
     if (!c) return;
     if (what === "jpg") {
       const bg = document.createElement("canvas");
@@ -119,6 +133,19 @@ export default function CreateSignature() {
                   <span className="text-sm font-medium">Your name</span>
                   <Input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Type your full name" className="h-12 text-lg" />
                 </label>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium">Name format</span>
+                  <Segmented
+                    value={nameFormat}
+                    onChange={setNameFormat}
+                    options={[
+                      { value: "full", label: "Full name" },
+                      { value: "firstInitial", label: "First + initial" },
+                      { value: "initialLast", label: "Initial + surname" },
+                      { value: "first", label: "First name" },
+                    ]}
+                  />
+                </div>
 
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium">Ink colour</span>
@@ -240,7 +267,7 @@ export default function CreateSignature() {
                   variant="secondary"
                   disabled={!main || saved}
                   onClick={() => {
-                    const c = renderSignature(opts(name), 2);
+                    const c = renderSignature(opts(text), 2);
                     if (c) {
                       rememberSignature(c.toDataURL("image/png"));
                       setSaved(true);

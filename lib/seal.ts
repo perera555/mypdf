@@ -1,6 +1,6 @@
 "use client";
 
-export type SealShape = "circle" | "badge" | "oval" | "square" | "rectangle";
+export type SealShape = "circle" | "badge" | "oval" | "square" | "rectangle" | "company";
 export type Emblem = "none" | "star" | "stars" | "check" | "flower" | "logo";
 export type BorderStyle = "double" | "single" | "dotted" | "rope";
 
@@ -11,6 +11,15 @@ export interface SealOptions {
   centerText: string; // can contain line breaks
   regLabel: string;
   regNo: string;
+  /** Any extra line, e.g. "Tel. 011 234 5678", "Serial No. 0042", "Index No. 12" */
+  extraText: string;
+  /** yyyy-mm-dd; empty = today (used when dateLine is on) */
+  dateValue: string;
+  /** Company details */
+  personName: string;
+  designation: string;
+  address: string;
+  phone: string;
   emblem: Emblem;
   logo?: HTMLImageElement | null;
   color: string;
@@ -34,6 +43,12 @@ export const DEFAULT_SEAL: SealOptions = {
   centerText: "APPROVED",
   regLabel: "Reg. No.",
   regNo: "",
+  extraText: "",
+  dateValue: "",
+  personName: "",
+  designation: "",
+  address: "",
+  phone: "",
   emblem: "star",
   color: "#1d4ed8",
   border: "double",
@@ -121,6 +136,44 @@ function arcText(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: nu
   });
 }
 
+/** Lay text along an ellipse (radii a, b), centred at the top or bottom, letters upright and evenly spaced by arc length. */
+function ellipseText(ctx: CanvasRenderingContext2D, text: string, cx: number, cy: number, a: number, b: number, top: boolean, spacing: number) {
+  const chars = [...text];
+  const widths = chars.map((c) => ctx.measureText(c).width + spacing);
+  const total = widths.reduce((x, y) => x + y, 0);
+  // walk from the centre point along the curve until the requested distance is covered
+  const t0 = top ? (3 * Math.PI) / 2 : Math.PI / 2;
+  const dir = top ? 1 : -1; // moving left-to-right as the reader sees it
+  const at = (dist: number) => {
+    const step = 0.002 * Math.sign(dist) * dir;
+    let t = t0;
+    let covered = 0;
+    const target = Math.abs(dist);
+    while (covered < target) {
+      const nt = t + step;
+      covered += Math.hypot(a * (Math.cos(nt) - Math.cos(t)), b * (Math.sin(nt) - Math.sin(t)));
+      t = nt;
+    }
+    return t;
+  };
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  let acc = -total / 2;
+  chars.forEach((c, i) => {
+    const t = at(acc + widths[i] / 2);
+    acc += widths[i];
+    const x = cx + a * Math.cos(t);
+    const y = cy + b * Math.sin(t);
+    // tangent in the reading direction
+    const angle = Math.atan2(dir * b * Math.cos(t), -dir * a * Math.sin(t));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillText(c, 0, 0);
+    ctx.restore();
+  });
+}
+
 function fitFont(ctx: CanvasRenderingContext2D, text: string, family: string, maxW: number, start: number, bold = true) {
   let size = start;
   do {
@@ -131,11 +184,72 @@ function fitFont(ctx: CanvasRenderingContext2D, text: string, family: string, ma
   return size;
 }
 
+/**
+ * Classic rectangular company stamp:
+ * COMPANY NAME / address / Tel · Reg. No. / (For and on behalf of) / ........ / Name / Designation / date
+ */
+function drawCompanyBody(ctx: CanvasRenderingContext2D, o: SealOptions, W: number, H: number, fam: string, pad: number, lw: number) {
+  const maxW = W - pad * 2;
+  type Line = { text: string; size: number; bold?: boolean; italic?: boolean; gapBefore?: number; dotted?: boolean };
+  const L: Line[] = [];
+  const k = o.textScale;
+  if (o.topText.trim()) L.push({ text: o.topText.trim().toUpperCase(), size: H * 0.12 * k, bold: true });
+  if (o.address.trim()) L.push({ text: o.address.trim(), size: H * 0.06 * k });
+  const contact = [o.phone.trim() && `Tel: ${o.phone.trim()}`, o.regNo.trim() && `${o.regLabel.trim()} ${o.regNo.trim()}`].filter(Boolean).join("   •   ");
+  if (contact) L.push({ text: contact, size: H * 0.055 * k });
+  if (o.extraText.trim()) L.push({ text: o.extraText.trim(), size: H * 0.055 * k });
+  const signatory = o.personName.trim() || o.designation.trim();
+  const center = o.centerText.trim();
+  if (center) L.push({ text: center, size: H * 0.055 * k, italic: true, gapBefore: H * 0.05 });
+  if (signatory) {
+    L.push({ text: "", size: H * 0.1, dotted: true, gapBefore: center ? 0 : H * 0.05 });
+    if (o.personName.trim()) L.push({ text: o.personName.trim(), size: H * 0.07 * k, bold: true });
+    if (o.designation.trim()) L.push({ text: o.designation.trim(), size: H * 0.06 * k });
+  }
+  if (o.dateLine) {
+    const d = o.dateValue ? new Date(`${o.dateValue}T00:00:00`) : new Date();
+    L.push({ text: `Date: ${d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" })}`, size: H * 0.055 * k, gapBefore: H * 0.02 });
+  }
+  if (!L.length) return;
+
+  const lineH = (l: Line) => l.size * 1.3 + (l.gapBefore ?? 0);
+  const total = L.reduce((s, l) => s + lineH(l), 0);
+  // shrink everything if it doesn't fit
+  const fit = Math.min(1, (H - pad * 2) / total);
+  let y = (H - total * fit) / 2;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const l of L) {
+    y += (l.gapBefore ?? 0) * fit;
+    const h = l.size * 1.3 * fit;
+    if (l.dotted) {
+      ctx.save();
+      ctx.lineWidth = lw * 0.6;
+      ctx.setLineDash([lw * 0.4, lw * 1.2]);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - maxW * 0.32, y + h * 0.75);
+      ctx.lineTo(W / 2 + maxW * 0.32, y + h * 0.75);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      let s = l.size * fit;
+      do {
+        ctx.font = `${l.italic ? "italic " : ""}${l.bold ? "bold " : ""}${s}px ${fam}`;
+        if (ctx.measureText(l.text).width <= maxW) break;
+        s -= 1;
+      } while (s > 6);
+      ctx.fillText(l.text, W / 2, y + h / 2);
+    }
+    y += h;
+  }
+}
+
 /** Draw the seal onto a square canvas of `size` px with a transparent background. */
 export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) {
-  const wide = o.shape === "oval" || o.shape === "rectangle";
+  const wide = o.shape === "oval" || o.shape === "rectangle" || o.shape === "company";
   canvas.width = size;
-  canvas.height = wide ? Math.round(size * 0.66) : size;
+  canvas.height = o.shape === "company" ? Math.round(size * 0.62) : wide ? Math.round(size * 0.66) : size;
   const ctx = canvas.getContext("2d")!;
   const W = canvas.width;
   const H = canvas.height;
@@ -174,6 +288,9 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
   if (o.border === "dotted") ring(outer + lw * 2.6, lw * 0.9, [lw * 0.2, lw * 1.6]);
   if (o.border === "rope") ring(outer + lw * 2.6, lw * 1.4, [lw * 1.2, lw * 0.8]);
 
+  if (o.shape === "company") {
+    drawCompanyBody(ctx, o, W, H, fam, outer + lw * 3.4 + size * 0.025, lw);
+  } else {
   const textBand = size * 0.1 * o.textScale;
   const badgeExtra = o.shape === "badge" ? lw * 2.6 : 0;
   const innerInset = outer + badgeExtra + lw * 2.4 + textBand + lw * 1.2;
@@ -187,21 +304,18 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
   const fontSize = textBand * 0.72;
   ctx.font = `bold ${fontSize}px ${fam}`;
   if (round) {
-    ctx.save();
+    const spacing = fontSize * (o.font === "sans" && o.shape !== "oval" ? 0.28 : 0.08);
     if (o.shape === "oval") {
-      ctx.translate(cx, cy);
-      ctx.scale(1, H / W);
-      ctx.translate(-cx, -cy);
+      // Text follows the real oval band, centred between the outer and inner rings.
+      const inset = outer + lw * 2.4 + textBand / 2 + lw * 0.6;
+      const a = W / 2 - inset;
+      const b = H / 2 - inset;
+      if (o.topText) ellipseText(ctx, o.topText.toUpperCase(), cx, cy, a, b, true, spacing);
+      if (o.bottomText) ellipseText(ctx, o.bottomText.toUpperCase(), cx, cy, a, b, false, spacing);
+    } else {
+      if (o.topText) arcText(ctx, o.topText.toUpperCase(), cx, cy, bandR, true, spacing);
+      if (o.bottomText) arcText(ctx, o.bottomText.toUpperCase(), cx, cy, bandR, false, spacing);
     }
-    // For ovals the context is squashed vertically, so a circle becomes the ellipse band.
-    // Size the radius from the vertical band position, and stretch glyphs back so letters aren't flattened.
-    const k = W / H;
-    const r = o.shape === "oval" ? (H / 2 - outer - lw * 2.4 - textBand / 2 - lw * 0.6) * k : bandR;
-    const unsquash = o.shape === "oval" ? k : 1;
-    const spacing = fontSize * (o.font === "sans" ? 0.28 : 0.12);
-    if (o.topText) arcText(ctx, o.topText.toUpperCase(), cx, cy, r, true, spacing, unsquash);
-    if (o.bottomText) arcText(ctx, o.bottomText.toUpperCase(), cx, cy, r, false, spacing, unsquash);
-    ctx.restore();
     // separators between top and bottom text
     if (o.topText && o.bottomText && circ) {
       star(ctx, cx - bandR, cy, fontSize * 0.35);
@@ -225,12 +339,21 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
   const innerW =
     circ ? (W / 2 - innerInset) * 1.5 : o.shape === "oval" ? (W / 2 - innerInset) * 1.4 : W - innerInset * 2 - size * 0.04;
   const lines = o.centerText.split("\n").filter((l) => l.trim());
+  if (o.personName.trim()) lines.push(o.personName.trim());
   const centerCount = lines.length;
+  if (o.designation.trim()) lines.push(o.designation.trim());
   if (o.regNo.trim()) lines.push(`${o.regLabel.trim()} ${o.regNo.trim()}`.trim());
-  if (o.dateLine) lines.push(new Date().toLocaleDateString());
+  if (o.phone.trim()) lines.push(`Tel: ${o.phone.trim()}`);
+  if (o.address.trim() && !round) lines.push(o.address.trim());
+  if (o.extraText.trim()) lines.push(o.extraText.trim());
+  if (o.dateLine) {
+    const d = o.dateValue ? new Date(`${o.dateValue}T00:00:00`) : new Date();
+    lines.push(d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }).toUpperCase());
+  }
   const emblemR = (o.shape === "rectangle" || o.shape === "oval" ? H : W) * 0.07 * o.textScale;
   const hasEmblem = o.emblem !== "none" && !(o.emblem === "logo" && !o.logo);
-  const lineH = size * 0.085 * o.textScale;
+  // Wide shapes (oval, rectangle) are shorter, so their centre lines must be tighter.
+  const lineH = (wide ? H * 0.9 : W) * 0.085 * o.textScale;
   const blockH = lines.length * lineH + (hasEmblem ? emblemR * 2.4 : 0);
   let y = cy - blockH / 2;
 
@@ -289,6 +412,7 @@ export function drawSeal(canvas: HTMLCanvasElement, o: SealOptions, size = 800) 
     }
     y += lineH;
   });
+  }
 
   // Solid: fill the seal and cut the artwork out of it
   if (o.solid) {
