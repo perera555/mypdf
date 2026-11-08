@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
-import { FolderHeart, House, LayoutGrid, PenLine, ScanLine } from "lucide-react";
+import { FolderHeart, House, LayoutGrid, ScanLine, Signature } from "lucide-react";
 import { GitHubIcon, LogoMark } from "@/components/Logo";
 import { InstallApp } from "@/components/InstallApp";
 import { Sidebar } from "@/components/Sidebar";
@@ -45,7 +45,7 @@ const MOBILE_TABS = [
   { href: "/", label: "Home", icon: House },
   { href: "/#tools", label: "Tools", icon: LayoutGrid },
   { href: "/tools/scan", label: "Scan", icon: ScanLine },
-  { href: "/tools/edit", label: "Edit", icon: PenLine },
+  { href: "/tools/sign", label: "Fill & Sign", icon: Signature },
   { href: "/files", label: "My Files", icon: FolderHeart },
 ];
 
@@ -64,6 +64,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <nav className="flex items-center gap-1 text-sm">
               <Link href="/#tools" className="hidden rounded-lg px-3 py-1.5 text-muted transition hover:bg-surface-2 hover:text-fg md:block">
                 All tools
+              </Link>
+              <Link href="/tools/sign" className="hidden rounded-lg px-3 py-1.5 font-medium text-accent transition hover:bg-surface-2 md:block">
+                Fill &amp; Sign
               </Link>
               <Link href="/tools/scan" className="hidden rounded-lg px-3 py-1.5 text-muted transition hover:bg-surface-2 hover:text-fg md:block">
                 Scan

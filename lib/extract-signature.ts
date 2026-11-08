@@ -23,6 +23,9 @@ export function extractSignature(img: HTMLImageElement, sensitivity = 0.5, ink: 
   c.width = w;
   c.height = h;
   const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  // Put transparent images (e.g. a PNG signature) on white paper first, so empty areas aren't read as ink.
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;

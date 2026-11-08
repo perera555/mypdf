@@ -26,7 +26,10 @@ export default function Home() {
             Read, edit, sign, merge, split, compress, convert and protect PDFs — all in your browser. Your files never leave your device.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
-            <Link href="/tools/edit" className="brand-gradient inline-flex h-12 items-center rounded-xl px-6 font-semibold text-white shadow-md transition hover:brightness-110">
+            <Link href="/tools/sign" className="brand-gradient inline-flex h-12 items-center rounded-xl px-6 font-semibold text-white shadow-md transition hover:brightness-110">
+              Fill &amp; Sign
+            </Link>
+            <Link href="/tools/edit" className="inline-flex h-12 items-center rounded-xl border border-line bg-surface px-6 font-semibold transition hover:bg-surface-2">
               Edit a PDF
             </Link>
             <Link href="#tools" className="inline-flex h-12 items-center rounded-xl border border-line bg-surface px-6 font-semibold transition hover:bg-surface-2">

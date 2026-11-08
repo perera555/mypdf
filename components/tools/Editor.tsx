@@ -32,8 +32,9 @@ import { SealDesigner } from "../SealDesigner";
 import { SignatureDialog } from "../SignatureDialog";
 import { Button, ErrorNote, IconButton, errorMessage } from "../ui";
 import { FileBar, WithPdf, type LoadedPdf } from "../WithPdf";
-import { exportEdits } from "../editor/export";
-import { bbox, type BBox, type EditorObj, FONT_CSS, type FontName, STAMPS, type TextObj, type Tool, transform } from "../editor/types";
+import { exportEdits, type FieldValue } from "../editor/export";
+import { bbox, type BBox, type EditorObj, FONT_CSS, type FontName, STAMPS, type TextObj, type Tool, transform, type Widget } from "../editor/types";
+import { getPdfjs } from "@/lib/pdfjs";
 import { baseName, loadImage } from "@/lib/files";
 import { showResult } from "@/lib/result";
 
@@ -78,7 +79,9 @@ interface Pending {
 function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode: Mode }) {
   const [state, setState] = useState<{ objects: EditorObj[]; past: EditorObj[][]; future: EditorObj[][] }>({ objects: [], past: [], future: [] });
   const objects = state.objects;
-  const [tool, setTool] = useState<Tool>(mode === "redact" ? "redact" : "select");
+  const [tool, setTool] = useState<Tool>(mode === "redact" ? "redact" : mode === "sign" ? "text" : "select");
+  const [fields, setFields] = useState<Record<string, FieldValue>>({});
+  const setField = useCallback((name: string, v: FieldValue) => setFields((f) => ({ ...f, [name]: v })), []);
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [style, setStyle] = useState<Style>({
@@ -239,7 +242,7 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
     setSelected(null);
     setEditing(null);
     try {
-      const out = await exportEdits(pdf.bytes, pdf.password, pdf.doc, objects);
+      const out = await exportEdits(pdf.bytes, pdf.password, pdf.doc, objects, mode === "sign" ? fields : {});
       const suffix = mode === "sign" ? "signed" : mode === "redact" ? "redacted" : "edited";
       showResult(out, `${baseName(pdf.file.name)}-${suffix}.pdf`, objects.some((o) => o.kind === "redact") ? "Redacted pages were flattened so the hidden content is permanently removed." : undefined);
     } catch (e) {
@@ -264,15 +267,17 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
   const hint =
     tool === "place"
       ? "Tap on a page to place it."
-      : tool === "redact"
-        ? "Drag over anything you want to permanently black out."
-        : tool === "text"
-          ? "Click on a page to type."
-          : mode === "sign" && sel
-            ? "Drag to move · drag the corner or use Smaller / Bigger to resize."
-            : mode === "sign"
-              ? "Press Sign, then tap where your signature should go."
-              : null;
+      : mode === "sign" && sel
+        ? "Drag to move · drag the corner or use Smaller / Bigger to resize."
+        : mode === "sign" && tool === "text"
+          ? "Click anywhere on the page to type. Blue boxes are form fields — just type in them. Press Sign to add your signature."
+          : mode === "sign" && tool !== "select"
+            ? "Click on the page to add it."
+            : tool === "redact"
+              ? "Drag over anything you want to permanently black out."
+              : tool === "text"
+                ? "Click on a page to type."
+                : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -283,7 +288,7 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
         <IconButton label="Redo (Ctrl+Y)" disabled={!state.future.length} onClick={redo}>
           <Redo2 className="h-4 w-4" />
         </IconButton>
-        <Button variant="primary" loading={busy} disabled={!objects.length} onClick={save}>
+        <Button variant="primary" loading={busy} disabled={!objects.length && !Object.keys(fields).length} onClick={save}>
           Save PDF
         </Button>
       </FileBar>
@@ -312,6 +317,12 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
             </SignBtn>
             <SignBtn active={tool === "cross"} onClick={() => choose("cross")}>
               <X className="h-4 w-4" />
+            </SignBtn>
+            <SignBtn active={tool === "dot"} onClick={() => choose("dot")}>
+              <span className="h-2.5 w-2.5 rounded-full bg-current" />
+            </SignBtn>
+            <SignBtn active={tool === "fillline"} onClick={() => choose("fillline")}>
+              <Minus className="h-4 w-4" />
             </SignBtn>
             <SignBtn active={sealDialog} onClick={() => setSealDialog(true)}>
               <BadgeCheck className="h-4 w-4" /> Seal
@@ -550,6 +561,9 @@ function Editor({ pdf, reset, mode }: { pdf: LoadedPdf; reset: () => void; mode:
               begin={begin}
               live={live}
               remove={remove}
+              fillMode={mode === "sign"}
+              fields={fields}
+              setField={setField}
             />
           ))}
         </div>
@@ -644,13 +658,52 @@ function EditorPage(props: {
   begin: () => void;
   live: (fn: (o: EditorObj[]) => EditorObj[]) => void;
   remove: (id: string) => void;
+  fillMode: boolean;
+  fields: Record<string, FieldValue>;
+  setField: (name: string, v: FieldValue) => void;
 }) {
-  const { doc, index, size, scale, objects, tool, style, selected, editing, pending } = props;
+  const { doc, index, size, scale, objects, tool, style, selected, editing, pending, fillMode } = props;
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<Drag | null>(null);
   const [visible, setVisible] = useState(false);
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+
+  // Fill & Sign: find the PDF's interactive form fields on this page.
+  useEffect(() => {
+    if (!fillMode || !visible) return;
+    let live = true;
+    (async () => {
+      const page = await doc.getPage(index + 1);
+      const vp = page.getViewport({ scale: 1 });
+      const annots = await page.getAnnotations();
+      const out: Widget[] = [];
+      for (const a of annots) {
+        if (a.subtype !== "Widget" || !a.fieldName || a.readOnly || a.hidden || a.pushButton) continue;
+        const [x1, y1] = vp.convertToViewportPoint(a.rect[0], a.rect[1]) as [number, number];
+        const [x2, y2] = vp.convertToViewportPoint(a.rect[2], a.rect[3]) as [number, number];
+        const box = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+        if (a.fieldType === "Tx") out.push({ ...box, id: a.id, name: a.fieldName, kind: "text", multiline: !!a.multiLine, initial: a.fieldValue ?? "" });
+        else if (a.fieldType === "Btn" && a.checkBox) out.push({ ...box, id: a.id, name: a.fieldName, kind: "check", initial: !!a.fieldValue && a.fieldValue !== "Off" });
+        else if (a.fieldType === "Btn" && a.radioButton)
+          out.push({ ...box, id: a.id, name: a.fieldName, kind: "radio", value: a.buttonValue, initial: a.fieldValue === a.buttonValue ? a.buttonValue : "" });
+        else if (a.fieldType === "Ch")
+          out.push({
+            ...box,
+            id: a.id,
+            name: a.fieldName,
+            kind: "choice",
+            options: (a.options ?? []).map((o: { exportValue: string; displayValue: string }) => ({ value: o.exportValue, label: o.displayValue })),
+            initial: Array.isArray(a.fieldValue) ? (a.fieldValue[0] ?? "") : (a.fieldValue ?? ""),
+          });
+      }
+      if (live) setWidgets(out);
+    })().catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [fillMode, visible, doc, index]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -671,7 +724,14 @@ function EditorPage(props: {
       const off = document.createElement("canvas");
       off.width = Math.floor(viewport.width * ratio);
       off.height = Math.floor(viewport.height * ratio);
-      task = page.render({ canvas: off, viewport, transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined });
+      // In Fill & Sign, form fields are drawn as live inputs instead of on the canvas.
+      const { AnnotationMode } = await getPdfjs();
+      task = page.render({
+        canvas: off,
+        viewport,
+        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
+        annotationMode: fillMode ? AnnotationMode.ENABLE_FORMS : AnnotationMode.ENABLE,
+      });
       await task.promise;
       const c = canvasRef.current;
       if (cancelled || !c) return;
@@ -683,9 +743,9 @@ function EditorPage(props: {
       cancelled = true;
       task?.cancel();
     };
-  }, [visible, doc, index, scale]);
+  }, [visible, doc, index, scale, fillMode]);
 
-  const toPt = (e: React.PointerEvent): [number, number] => {
+  const toPt =(e: React.PointerEvent): [number, number] => {
     const r = svgRef.current!.getBoundingClientRect();
     return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale];
   };
@@ -706,7 +766,16 @@ function EditorPage(props: {
     const s = style;
     const capture = () => svgRef.current?.setPointerCapture(e.pointerId);
 
-    switch (tool) {
+    // Fill & Sign: clicking something already on the page selects it instead of adding another item.
+    const onHandle = (() => {
+      const cur = objects.find((o) => o.id === selected);
+      if (!cur) return false;
+      const b = bbox(cur);
+      return Math.abs(x - (b.x + b.w)) < 16 / scale && Math.abs(y - (b.y + b.h)) < 16 / scale;
+    })();
+    const effective: Tool = fillMode && tool !== "place" && tool !== "select" && (onHandle || hitTest(x, y)) ? "select" : tool;
+
+    switch (effective) {
       case "select": {
         const cur = objects.find((o) => o.id === selected);
         if (cur) {
@@ -746,7 +815,7 @@ function EditorPage(props: {
         props.add({
           id,
           page,
-          kind: tool,
+          kind: effective,
           x,
           y,
           w: 0,
@@ -763,7 +832,7 @@ function EditorPage(props: {
       case "line":
       case "arrow": {
         const id = uid();
-        props.add({ id, page, kind: tool, x1: x, y1: y, x2: x, y2: y, stroke: s.color, strokeWidth: s.strokeWidth, opacity: s.opacity });
+        props.add({ id, page, kind: effective, x1: x, y1: y, x2: x, y2: y, stroke: s.color, strokeWidth: s.strokeWidth, opacity: s.opacity });
         drag.current = { mode: "line", id, start: [x, y] };
         capture();
         return;
@@ -777,8 +846,17 @@ function EditorPage(props: {
         props.setSelected(id);
         if (tool === "text") {
           props.setEditing(id);
-          props.setTool("select");
+          if (!fillMode) props.setTool("select");
         }
+        return;
+      }
+      case "dot":
+        props.add({ id: uid(), page, kind: "draw", strokes: [[[x, y]]], stroke: s.color, strokeWidth: Math.max(4, s.fontSize * 0.45), opacity: 1 });
+        return;
+      case "fillline": {
+        const id = uid();
+        props.add({ id, page, kind: "line", x1: x - 40, y1: y, x2: x + 40, y2: y, stroke: s.color, strokeWidth: 1.2, opacity: 1 });
+        props.setSelected(id);
         return;
       }
       case "note": {
@@ -827,7 +905,7 @@ function EditorPage(props: {
         props.add({ id, page, kind: "image", x: x - pending.w / 2, y: y - pending.h / 2, w: pending.w, h: pending.h, src: pending.src });
         props.setPending(null);
         props.setSelected(id);
-        props.setTool("select");
+        props.setTool(fillMode ? "text" : "select");
         return;
       }
     }
@@ -931,6 +1009,49 @@ function EditorPage(props: {
         {tool === "place" && pending && <rect x={0} y={0} width={size.w} height={size.h} fill="rgba(225,29,72,0.04)" />}
       </svg>
 
+      {fillMode &&
+        widgets.map((wd) => {
+          const style: React.CSSProperties = { left: wd.x * scale, top: wd.y * scale, width: wd.w * scale, height: wd.h * scale };
+          const value = props.fields[wd.name];
+          const cls = "absolute z-10 border border-sky-400/70 bg-sky-100/50 outline-none focus:border-sky-600 focus:bg-sky-50/80";
+          if (wd.kind === "text") {
+            const v = typeof value === "string" ? value : wd.initial;
+            const fs = Math.max(8, Math.min(wd.h * 0.68, 13)) * scale;
+            return wd.multiline ? (
+              <textarea key={wd.id} aria-label={wd.name} value={v} onChange={(e) => props.setField(wd.name, e.target.value)} className={`${cls} resize-none p-0.5 text-black`} style={{ ...style, fontSize: fs }} />
+            ) : (
+              <input key={wd.id} aria-label={wd.name} value={v} onChange={(e) => props.setField(wd.name, e.target.value)} className={`${cls} px-0.5 text-black`} style={{ ...style, fontSize: fs }} />
+            );
+          }
+          if (wd.kind === "check") {
+            const v = typeof value === "boolean" ? value : wd.initial;
+            return (
+              <button key={wd.id} type="button" role="checkbox" aria-checked={v} aria-label={wd.name} onClick={() => props.setField(wd.name, !v)} className={`${cls} flex items-center justify-center text-black`} style={style}>
+                {v && <Check style={{ width: wd.h * scale * 0.8, height: wd.h * scale * 0.8 }} strokeWidth={3} />}
+              </button>
+            );
+          }
+          if (wd.kind === "radio") {
+            const v = typeof value === "string" ? value : wd.initial;
+            const on = v === wd.value;
+            return (
+              <button key={wd.id} type="button" role="radio" aria-checked={on} aria-label={`${wd.name} ${wd.value}`} onClick={() => props.setField(wd.name, wd.value)} className={`${cls} flex items-center justify-center rounded-full`} style={style}>
+                {on && <span className="rounded-full bg-black" style={{ width: wd.h * scale * 0.5, height: wd.h * scale * 0.5 }} />}
+              </button>
+            );
+          }
+          const v = typeof value === "string" ? value : wd.initial;
+          return (
+            <select key={wd.id} aria-label={wd.name} value={v} onChange={(e) => props.setField(wd.name, e.target.value)} className={`${cls} text-black`} style={{ ...style, fontSize: Math.max(8, Math.min(wd.h * 0.6, 12)) * scale }}>
+              <option value="">—</option>
+              {wd.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          );
+        })}
       {editObj?.kind === "text" && (
         <textarea
           autoFocus

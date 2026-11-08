@@ -264,8 +264,8 @@ export function SignatureDialog({
                 <div className="flex flex-col gap-2">
                   <label className="flex h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-white px-4 text-center text-sm text-zinc-500 hover:border-accent">
                     <Upload className="h-6 w-6" />
-                    Choose a photo or scan of your signature on paper
-                    <span className="text-xs text-zinc-400">Only the ink is kept — the paper is removed automatically</span>
+                    <span className="font-medium text-zinc-700">Choose a photo or scan of your signature on paper</span>
+                    <span className="text-xs text-zinc-400">From your computer or phone (JPG, PNG). Only the handwriting is kept — the paper is removed.</span>
                     <input type="file" accept="image/*" className="sr-only" onChange={(e) => void pickPhoto(e.target.files?.[0])} />
                   </label>
                   <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-line bg-surface p-2.5 text-sm font-medium hover:bg-surface-2 sm:hidden">

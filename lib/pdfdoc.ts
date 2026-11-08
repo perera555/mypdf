@@ -28,8 +28,8 @@ export async function loadPdfDoc(bytes: Uint8Array, password?: string): Promise<
   return out;
 }
 
-export async function savePdf(doc: PDFDocument): Promise<Uint8Array> {
+export async function savePdf(doc: PDFDocument, opts: { updateFieldAppearances?: boolean } = {}): Promise<Uint8Array> {
   doc.setProducer("MyPDF");
   doc.setModificationDate(new Date());
-  return doc.save({ useObjectStreams: true });
+  return doc.save({ useObjectStreams: true, updateFieldAppearances: opts.updateFieldAppearances ?? true });
 }

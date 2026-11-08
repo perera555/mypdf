@@ -13,7 +13,7 @@ export default function SealCreator() {
       <p className="text-sm text-muted">
         Saved seals appear under the <b>Seal</b> button in{" "}
         <Link href="/tools/sign" className="text-accent hover:underline">
-          Sign PDF
+          Fill &amp; Sign
         </Link>{" "}
         and{" "}
         <Link href="/tools/edit" className="text-accent hover:underline">

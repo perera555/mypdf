@@ -63,9 +63,10 @@ export const TOOLS: Tool[] = [
   },
   {
     slug: "sign",
-    name: "Sign PDF",
-    short: "Draw, type or upload your signature.",
-    description: "Create a signature by drawing, typing or uploading an image and place it anywhere on your PDF.",
+    name: "Fill & Sign",
+    short: "Fill in any PDF and add your signature.",
+    description:
+      "Fill in any PDF — type anywhere, tick boxes, add dates and complete form fields — then sign with a drawn, typed or uploaded signature and place it anywhere.",
     category: "View & Edit",
     icon: Signature,
     color: "from-fuchsia-500 to-pink-600",

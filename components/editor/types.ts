@@ -100,7 +100,17 @@ export type Tool =
   | "check"
   | "cross"
   | "date"
+  | "dot"
+  | "fillline"
   | "place";
+
+/** An interactive form field found on a page (visual coordinates, PDF points). */
+export type Widget = BBox & { id: string; name: string } & (
+    | { kind: "text"; multiline: boolean; initial: string }
+    | { kind: "check"; initial: boolean }
+    | { kind: "radio"; value: string; initial: string }
+    | { kind: "choice"; options: { value: string; label: string }[]; initial: string }
+  );
 
 export const FONT_CSS: Record<FontName, string> = {
   Helvetica: "Helvetica, Arial, sans-serif",

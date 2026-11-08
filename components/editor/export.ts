@@ -1,6 +1,21 @@
 "use client";
 
-import { BlendMode, degrees, type PDFDocument, type PDFFont, type PDFPage, rgb, StandardFonts } from "@cantoo/pdf-lib";
+import {
+  BlendMode,
+  degrees,
+  PDFBool,
+  PDFCheckBox,
+  type PDFDocument,
+  PDFDropdown,
+  type PDFFont,
+  PDFName,
+  PDFOptionList,
+  type PDFPage,
+  PDFRadioGroup,
+  PDFTextField,
+  rgb,
+  StandardFonts,
+} from "@cantoo/pdf-lib";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { canvasToBlob, hexToRgb01, readFileBytes } from "@/lib/files";
 import { visualFrame } from "@/lib/geometry";
@@ -33,13 +48,44 @@ function textToPng(o: TextObj): string {
   return c.toDataURL("image/png");
 }
 
+export type FieldValue = string | boolean;
+
+/** Write values into the PDF's own interactive form fields. Returns false if appearances couldn't be generated. */
+function fillFields(doc: PDFDocument, values: Record<string, FieldValue>): boolean {
+  const names = Object.keys(values);
+  if (!names.length) return true;
+  const form = doc.getForm();
+  for (const name of names) {
+    const f = form.getFieldMaybe(name);
+    const v = values[name];
+    try {
+      if (f instanceof PDFTextField) f.setText(String(v) || undefined);
+      else if (f instanceof PDFCheckBox) (v ? f.check() : f.uncheck());
+      else if (f instanceof PDFRadioGroup && typeof v === "string" && v) f.select(v);
+      else if ((f instanceof PDFDropdown || f instanceof PDFOptionList) && typeof v === "string" && v) f.select(v);
+    } catch {
+      /* value not allowed for this field — skip it */
+    }
+  }
+  try {
+    form.updateFieldAppearances();
+    return true;
+  } catch {
+    // Characters outside the standard fonts (e.g. Sinhala): let the PDF viewer draw the field text itself.
+    form.acroForm.dict.set(PDFName.of("NeedAppearances"), PDFBool.True);
+    return false;
+  }
+}
+
 export async function exportEdits(
   bytes: Uint8Array,
   password: string | undefined,
   source: PDFDocumentProxy,
   objects: EditorObj[],
+  fieldValues: Record<string, FieldValue> = {},
 ): Promise<Uint8Array> {
   const doc = await loadPdfDoc(bytes, password);
+  const appearancesOk = fillFields(doc, fieldValues);
   const fonts = new Map<string, PDFFont>();
   const font = async (name: FontName, bold: boolean) => {
     const key = `${name}-${bold}`;
@@ -204,7 +250,7 @@ export async function exportEdits(
       }
     }
   }
-  return savePdf(doc);
+  return savePdf(doc, { updateFieldAppearances: appearancesOk });
 }
 
 function wrap(text: string, font: PDFFont, size: number, maxW: number): string[] {
