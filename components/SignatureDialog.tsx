@@ -15,6 +15,11 @@ export function loadSavedSignatures(): string[] {
     return [];
   }
 }
+/** Add a signature to the saved list used by Fill & Sign. */
+export function rememberSignature(url: string) {
+  storeSignatures([url, ...loadSavedSignatures().filter((s) => s !== url)]);
+}
+
 function storeSignatures(list: string[]) {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(list.slice(0, 6)));

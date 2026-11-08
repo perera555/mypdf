@@ -53,9 +53,10 @@ export function ToolGrid() {
             <Link
               key={t.slug}
               href={`/tools/${t.slug}`}
-              className="group relative flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-accent/40"
+              className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-1 hover:border-transparent hover:shadow-xl"
             >
-              <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br text-white shadow-md ${t.color}`}>
+              <span className={`absolute inset-x-0 top-0 h-1 bg-linear-to-r opacity-0 transition group-hover:opacity-100 ${t.color}`} />
+              <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br text-white shadow-md transition group-hover:scale-105 ${t.color}`}>
                 <Icon className="h-6 w-6" />
               </div>
               <div>
