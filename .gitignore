@@ -42,3 +42,5 @@ next-env.d.ts
 
 # copied from pdfjs-dist at install time
 /public/pdf.worker.min.mjs
+.vercel
+.env*
